@@ -1,0 +1,3 @@
+policy: 'MlpPolicy'
+gamma: 0.98
+buffer_size: 100

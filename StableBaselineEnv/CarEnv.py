@@ -11,21 +11,30 @@ SHOW_PREVIEW = True
 IM_WIDTH = 640
 IM_HEIGHT = 480
 SECONDS_PER_EPISODE = 20 # Per episode max time
+CARLA_RESPONSE_TIMEOUT = 15.0
+
+THROTTLE_MAX = 1.0
+THROTTLE_MIN = -1.0
+STEER_MAX = 1.0
+STEER_MIN = -1.0
+# For discrete action space
+STEER_ROTATION = 1.0 
 N_DISCRETE_ACTIONS = 3
-CARLA_RESPONSE_TIMEOUT = 5.0
 
 class CarEnv(gym.Env):
   """Custom Environment that follows gym interface"""
   metadata = {'render.modes': ['human']}
 
   SHOW_CAM = SHOW_PREVIEW
-  STEER_AMT = 1.0
   im_width = IM_WIDTH
   im_height = IM_HEIGHT
   front_camera = None
 
-  def __init__(self):
+
+  def __init__(self, action_space_type):
     super(CarEnv, self).__init__()
+
+    self.action_space_type = action_space_type
 
     # Carla Config
     self.client = carla.Client("localhost", 2000)
@@ -42,13 +51,16 @@ class CarEnv(gym.Env):
     self.model_3 = self.blueprint_library.filter("model3")[0] # Change Car model from here
     self.actor_list = []
 
-
     # RL Environment variable
-    self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
+    if self.action_space_type == "continious":
+      self.action_space = spaces.Box(np.array([THROTTLE_MIN, STEER_MIN]), np.array([THROTTLE_MAX, STEER_MAX]), dtype=np.float32)
+
+    elif self.action_space_type == "discrete":
+      self.action_space = self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
+    
     self.observation_space = spaces.Box(low=0, high=255,
                                             shape=(self.im_height, self.im_width, 3), dtype=np.uint8)
 
-    
 
   def reset(self):
     self.collision_hist = []
@@ -92,7 +104,6 @@ class CarEnv(gym.Env):
     return self.front_camera
 
 
-
   def process_img(self, image):
     i = np.array(image.raw_data, dtype = np.uint8)
     # print(i.shape)
@@ -101,18 +112,14 @@ class CarEnv(gym.Env):
     # print(i3.shape)
     self.front_camera = i3
 
+
   def collision_data(self, event):
     self.collision_hist.append(event)
 
 
-
-  def step(self, action):
-    if action == 0: # Left
-      self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1*self.STEER_AMT))
-    elif action == 1: # Straight
-      self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer= 0))
-    elif action == 2: # Right
-      self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1*self.STEER_AMT))
+  def _step(self, throttle, steer):
+    # __init__(_object*, float throttle=0.0, float steer=0.0, float brake=0.0, bool hand_brake=False, bool reverse=False, bool manual_gear_shift=False, int gear=0)
+    self.vehicle.apply_control(carla.VehicleControl(throttle = throttle, steer = steer))
 
     v = self.vehicle.get_velocity()
     kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
@@ -120,7 +127,7 @@ class CarEnv(gym.Env):
     if len(self.collision_hist) != 0:
       done = True
       reward = -200
-    elif kmh < 50:
+    elif kmh < 25:
       done = False
       reward = -1
     else:
@@ -131,9 +138,22 @@ class CarEnv(gym.Env):
       done = True
 
     self.render()
-
     info = {}
     return self.front_camera, reward, done, info
+
+
+  def step(self, action):
+    if action is not None:
+      if type(action)==np.ndarray:
+        return self._step((action[0].item()+1)/2, action[1].item())
+      else:
+        if action == 0: # Left
+          steer = -1 * STEER_ROTATION
+        elif action == 1: # Straight
+          steer = 0
+        elif action == 2:# Right
+          steer = 1 * STEER_ROTATION
+        return self._step(1.0, steer)
 
 
   def render(self, mode='human'):
@@ -149,5 +169,7 @@ class CarEnv(gym.Env):
 
   def close(self):
     cv2.destroyAllWindows()
-    
-
+  
+  
+  def __del__(self):
+    self.close()

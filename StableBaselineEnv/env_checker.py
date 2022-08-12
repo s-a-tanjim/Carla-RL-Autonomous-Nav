@@ -1,10 +1,10 @@
 from stable_baselines3.common.env_checker import check_env
 from CarEnv import CarEnv
 
-env = CarEnv()
+env = CarEnv(action_space_type='discrete')
+# env = CarEnv(action_space_type='continious')
 # It will check your custom environment and output additional warnings if needed
 check_env(env)
-
 
 # Checking by manual script
 
