@@ -29,6 +29,7 @@ class CarEnv(gym.Env):
   im_width = IM_WIDTH
   im_height = IM_HEIGHT
   front_camera = None
+  car_navigation_map = None
 
 
   def __init__(self, action_space_type):
@@ -40,6 +41,7 @@ class CarEnv(gym.Env):
     self.client = carla.Client("localhost", 2000)
     self.client.set_timeout(CARLA_RESPONSE_TIMEOUT)
     self.world = self.client.get_world()
+    self.map = self.world.get_map()
     weather = carla.WeatherParameters(
         cloudiness=99.0,
         precipitation=30.0,
@@ -51,6 +53,11 @@ class CarEnv(gym.Env):
     self.model_3 = self.blueprint_library.filter("model3")[0] # Change Car model from here
     self.actor_list = []
 
+    # Map variable
+    self.car_navigation_map = np.zeros((512,512,3), dtype=np.uint8)
+    self.map_color = (255,255,255)
+    self.reset_step_count = 0
+
     # RL Environment variable
     if self.action_space_type == "continious":
       self.action_space = spaces.Box(np.array([THROTTLE_MIN, STEER_MIN]), np.array([THROTTLE_MAX, STEER_MAX]), dtype=np.float32)
@@ -60,6 +67,10 @@ class CarEnv(gym.Env):
     
     self.observation_space = spaces.Box(low=0, high=255,
                                             shape=(self.im_height, self.im_width, 3), dtype=np.uint8)
+
+    if self.SHOW_CAM:
+      cv2.namedWindow("Map", cv2.WINDOW_NORMAL)
+      cv2.namedWindow("Feedback", cv2.WINDOW_NORMAL)
 
 
   def reset(self):
@@ -71,7 +82,8 @@ class CarEnv(gym.Env):
     self.actor_list = []
 
     # Spawn Car
-    self.transform = random.choice(self.world.get_map().get_spawn_points())
+    # self.transform = random.choice(self.map.get_spawn_points())
+    self.transform = self.map.get_spawn_points()[0]
     self.vehicle = self.world.spawn_actor(self.model_3, self.transform)
     self.actor_list.append(self.vehicle)
 
@@ -94,6 +106,14 @@ class CarEnv(gym.Env):
     self.actor_list.append(self.colsensor)
     self.colsensor.listen(lambda event: self.collision_data(event))
 
+    # On each episode the color of the path in map will be different
+    self.map_color = (random.randint(50,255), random.randint(50,255), random.randint(50,255))
+    self.reset_step_count += 1
+
+    # After each 10 reset, map will reset
+    if(self.reset_step_count%10==0):
+      self.car_navigation_map = np.zeros((512,512,3), dtype=np.uint8)
+    
     while self.front_camera is None:
       time.sleep(0.01)
 
@@ -123,6 +143,12 @@ class CarEnv(gym.Env):
 
     v = self.vehicle.get_velocity()
     kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
+
+    # Updating the map
+    vehicle_waypoint = self.map.get_waypoint(self.vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Sidewalk))
+    x_val = int(vehicle_waypoint.transform.location.x)+256
+    y_val = int(vehicle_waypoint.transform.location.y)+256
+    self.car_navigation_map[x_val, y_val] = self.map_color
 
     if len(self.collision_hist) != 0:
       done = True
@@ -163,6 +189,7 @@ class CarEnv(gym.Env):
       # cv2.imwrite("Feedback.jpg", self.front_camera)
       # img = cv2.imread("Feedback.jpg", 0)
       # print(self.front_camera.shape)
+      cv2.imshow("Map", self.car_navigation_map)
       cv2.imshow("Feedback", self.front_camera)
       cv2.waitKey(1)
 
