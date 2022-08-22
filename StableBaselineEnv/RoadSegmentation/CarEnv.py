@@ -57,8 +57,6 @@ class CarEnv(gym.Env):
     self.car_navigation_map = np.zeros((512,512,3), dtype=np.uint8)
     self.map_color = (255,255,255)
     self.reset_step_count = 0
-    self.CARLA_WAYPOINT_COLOR = carla.Color(r=3, g=211, b=252, a=255)
-    self.previous_vehicle_location = None
 
     # RL Environment variable
     if self.action_space_type == "continious":
@@ -115,8 +113,6 @@ class CarEnv(gym.Env):
     # After each 10 reset, map will reset
     if(self.reset_step_count%10==0):
       self.car_navigation_map = np.zeros((512,512,3), dtype=np.uint8)
-    self.CARLA_WAYPOINT_COLOR = carla.Color(r=random.randint(1,255), g=random.randint(1,255), b=random.randint(1,255), a=0)
-    self.previous_vehicle_location = self.vehicle.get_location()
     
     while self.front_camera is None:
       time.sleep(0.01)
@@ -141,10 +137,6 @@ class CarEnv(gym.Env):
     self.collision_hist.append(event)
 
 
-  def draw_line(self, start, end):
-    self.world.debug.draw_line(start, end, thickness = 0.2, color = self.CARLA_WAYPOINT_COLOR, life_time = 120.0)
-
-
   def _step(self, throttle, steer):
     # __init__(_object*, float throttle=0.0, float steer=0.0, float brake=0.0, bool hand_brake=False, bool reverse=False, bool manual_gear_shift=False, int gear=0)
     self.vehicle.apply_control(carla.VehicleControl(throttle = throttle, steer = steer))
@@ -153,14 +145,10 @@ class CarEnv(gym.Env):
     kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
 
     # Updating the map
-    vehicle_new_location = self.vehicle.get_location()
-    vehicle_waypoint = self.map.get_waypoint(vehicle_new_location, project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Sidewalk))
+    vehicle_waypoint = self.map.get_waypoint(self.vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Sidewalk))
     x_val = int(vehicle_waypoint.transform.location.x)+256
     y_val = int(vehicle_waypoint.transform.location.y)+256
     self.car_navigation_map[x_val, y_val] = self.map_color
-
-    self.draw_line(self.previous_vehicle_location, vehicle_new_location)
-    self.previous_vehicle_location = vehicle_new_location
 
     if len(self.collision_hist) != 0:
       done = True
@@ -208,9 +196,6 @@ class CarEnv(gym.Env):
 
   def close(self):
     cv2.destroyAllWindows()
-    
-    for actor in self.actor_list:
-      actor.destroy()
   
   
   def __del__(self):

@@ -4,6 +4,7 @@ import time
 import numpy as np
 from stable_baselines3 import DDPG, PPO
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
+import yaml
 
 # ALGORITHM_TYPE = "ddpg"
 ALGORITHM_TYPE = "ppo"
@@ -45,14 +46,6 @@ MAX_ITERS = 20 # 2000
 
 iters = 0
 while iters < MAX_ITERS:
-	try:
-		iters += 1
-		model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"{ALGORITHM_TYPE}")
-		model.save(f"{models_dir}/{TIMESTEPS*iters}")
-	
-	except KeyboardInterrupt:
-		print("Exit!")
-		break
-
-	except:
-		break
+	iters += 1
+	model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"{ALGORITHM_TYPE}")
+	model.save(f"{models_dir}/{TIMESTEPS*iters}")
