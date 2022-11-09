@@ -1,0 +1,7 @@
+stable-baselines3==1.5.0
+numpy==1.22.4
+gym==0.21.0
+carla==0.9.13
+opencv-python==4.6.0.66
+tensorflow-cpu==2.9.1
+tensorboard==2.9.1
